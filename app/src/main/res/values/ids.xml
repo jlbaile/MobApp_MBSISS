@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="violation" type="id" />
+    <item name="camera" type="id" />
+    <item name="setting" type="id" />
+    <item name="fragment_container" type="id" />
+    <item name="home" type="id" />
+</resources>
