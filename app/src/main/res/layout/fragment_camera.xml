@@ -1,231 +1,225 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<!--
+    fragment_camera.xml
+    ───────────────────
+    Layer stack (bottom → top):
+      1. PreviewView          — live camera feed (full screen)
+      2. ScanOverlayView      — white corner brackets only (no dim)
+      3. Instruction bar      — top of screen
+      4. Thumbnail strip      — above bottom controls
+      5. Bottom control bar   — Flash | Capture | Flip  +  Retake buttons
+      6. Confirm & Save btn   — appears only after both sides confirmed
+      7. ProgressBar          — centred, shown during capture/OCR
+-->
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#F9F9FF">
+    android:background="#000000">
 
-    <!-- Header -->
-    <LinearLayout
+    <!-- 1. Camera preview -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:scaleType="fillCenter"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+    <!-- 2. Corner-bracket guide (no background — transparent) -->
+    <com.example.mbsiss.Scanoverlayview
+        android:id="@+id/scanOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 3. Instruction bar -->
+    <TextView
+        android:id="@+id/tvInstruction"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Scan Student ID"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="#191C23"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Capture both sides of the student identification card."
-            android:textSize="13sp"
-            android:textColor="#414754"
-            android:layout_marginTop="2dp"/>
-    </LinearLayout>
-
-    <!-- Camera Preview -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginVertical="8dp">
-
-        <androidx.camera.view.PreviewView
-            android:id="@+id/previewView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#1A1A1A"/>
-
-        <!-- Corner Guide Overlay -->
-        <View
-            android:id="@+id/scanOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
-
-        <!-- Loading indicator during OCR -->
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone"
-            android:indeterminateTint="#FFFFFF"/>
-
-        <!-- Instruction Label -->
-        <TextView
-            android:id="@+id/tvInstruction"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="80dp"
-            android:text="Align FRONT of ID within frame"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:background="#66000000"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"/>
-
-        <!-- Camera Controls Overlay -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="16dp"
-            android:orientation="horizontal"
-            android:gravity="center">
-
-            <!-- Flash Toggle -->
-            <ImageButton
-                android:id="@+id/btnFlash"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_marginEnd="32dp"
-                android:src="@android:drawable/ic_menu_view"
-                android:background="#44FFFFFF"
-                android:padding="12dp"/>
-
-            <!-- Capture Button -->
-            <FrameLayout
-                android:layout_width="72dp"
-                android:layout_height="72dp">
-
-                <View
-                    android:layout_width="72dp"
-                    android:layout_height="72dp"
-                    android:background="@drawable/circle_white_border"/>
-
-                <Button
-                    android:id="@+id/btnCapture"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_gravity="center"
-                    android:background="@drawable/circle_white"
-                    android:text=""/>
-            </FrameLayout>
-
-            <!-- Flip Camera -->
-            <ImageButton
-                android:id="@+id/btnFlipCamera"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_marginStart="32dp"
-                android:src="@android:drawable/ic_menu_rotate"
-                android:background="#44FFFFFF"
-                android:padding="12dp"/>
-        </LinearLayout>
-    </FrameLayout>
-
-    <!-- Bottom Panel: Thumbnails + Confirm -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="16dp"
+        android:background="#AA000000"
+        android:gravity="center"
+        android:paddingVertical="10dp"
         android:paddingHorizontal="16dp"
-        android:paddingBottom="12dp"
-        android:gravity="center_vertical">
+        android:text="Align FRONT of ID within frame"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
 
-        <!-- Front ID Thumbnail + Retake -->
+    <!-- 4. Thumbnail strip (front + back previews, above controls) -->
+    <LinearLayout
+        android:id="@+id/layoutThumbnails"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="130dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#AA000000"
+        android:padding="8dp">
+
+        <!-- Front thumbnail -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:layout_marginEnd="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Front ID"
-                android:textSize="11sp"
-                android:textColor="#414754"/>
+            android:layout_marginEnd="12dp">
 
             <ImageView
                 android:id="@+id/imgFrontPreview"
-                android:layout_width="match_parent"
-                android:layout_height="70dp"
+                android:layout_width="80dp"
+                android:layout_height="52dp"
                 android:scaleType="centerCrop"
-                android:background="#E0E2EC"
-                android:layout_marginTop="4dp"/>
-
-            <!-- ✅ ADDED: Retake Front button — hidden until front is captured -->
-            <Button
-                android:id="@+id/btnRetakeFront"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="↺ Retake"
-                android:textSize="11sp"
-                android:textColor="#005BBF"
-                android:backgroundTint="#E8F0FE"
-                android:layout_marginTop="4dp"
-                android:paddingVertical="4dp"
-                android:visibility="gone"/>
-
-        </LinearLayout>
-
-        <!-- Back ID Thumbnail + Retake -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginStart="8dp">
+                android:background="#333333"
+                android:src="@android:color/darker_gray" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:text="Back ID"
-                android:textSize="11sp"
-                android:textColor="#414754"/>
+                android:text="FRONT"
+                android:textColor="#AAFFFFFF"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:paddingTop="2dp" />
+
+            <Button
+                android:id="@+id/btnRetakeFront"
+                android:layout_width="80dp"
+                android:layout_height="24dp"
+                android:text="Retake"
+                android:textSize="9sp"
+                android:paddingHorizontal="0dp"
+                android:paddingVertical="0dp"
+                android:visibility="gone"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:textColor="#29B6F6" />
+        </LinearLayout>
+
+        <!-- Back thumbnail -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center">
 
             <ImageView
                 android:id="@+id/imgBackPreview"
-                android:layout_width="match_parent"
-                android:layout_height="70dp"
+                android:layout_width="80dp"
+                android:layout_height="52dp"
                 android:scaleType="centerCrop"
-                android:background="#E0E2EC"
-                android:layout_marginTop="4dp"/>
+                android:background="#333333"
+                android:src="@android:color/darker_gray" />
 
-            <!-- ✅ ADDED: Retake Back button — hidden until back is captured -->
+            <TextView
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:text="BACK"
+                android:textColor="#AAFFFFFF"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:paddingTop="2dp" />
+
             <Button
                 android:id="@+id/btnRetakeBack"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="↺ Retake"
-                android:textSize="11sp"
-                android:textColor="#005BBF"
-                android:backgroundTint="#E8F0FE"
-                android:layout_marginTop="4dp"
-                android:paddingVertical="4dp"
-                android:visibility="gone"/>
-
+                android:layout_width="80dp"
+                android:layout_height="24dp"
+                android:text="Retake"
+                android:textSize="9sp"
+                android:paddingHorizontal="0dp"
+                android:paddingVertical="0dp"
+                android:visibility="gone"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:textColor="#29B6F6" />
         </LinearLayout>
-
-        <!-- Confirm & Save Button -->
-        <Button
-            android:id="@+id/btnConfirm"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="Confirm\n&amp; Save"
-            android:textSize="12sp"
-            android:enabled="false"
-            android:backgroundTint="#005BBF"
-            android:textColor="#FFFFFF"
-            android:paddingHorizontal="16dp"/>
-
     </LinearLayout>
 
-</LinearLayout>
+    <!-- 5. Bottom control bar: Flash | Capture | Flip -->
+    <LinearLayout
+        android:id="@+id/layoutBottomControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="28dp"
+        android:paddingTop="12dp"
+        android:paddingHorizontal="32dp"
+        android:background="#CC000000">
+
+        <ImageButton
+            android:id="@+id/btnFlash"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_view"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Toggle flash"
+            android:tint="#FFFFFF" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Capture: outer ring wraps inner button -->
+        <FrameLayout
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:gravity="center">
+
+            <View
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="@drawable/circle_white_border" />
+
+            <Button
+                android:id="@+id/btnCapture"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_gravity="center"
+                android:background="@drawable/circle_white"
+                android:text=""
+                android:elevation="2dp" />
+        </FrameLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/btnFlipCamera"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Flip camera"
+            android:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- 6. Confirm & Save — hidden until both sides done -->
+    <Button
+        android:id="@+id/btnConfirm"
+        android:layout_width="200dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="180dp"
+        android:text="Confirm &amp; Save"
+        android:backgroundTint="#29B6F6"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:enabled="false"
+        android:visibility="gone"
+        android:elevation="4dp" />
+
+    <!-- 7. Progress spinner -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="#29B6F6"
+        android:visibility="gone" />
+
+</FrameLayout>

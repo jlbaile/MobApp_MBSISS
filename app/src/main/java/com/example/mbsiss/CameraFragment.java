@@ -4,13 +4,10 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
 import android.graphics.ImageFormat;
-import android.graphics.Paint;
+import android.graphics.Matrix;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.YuvImage;
 import android.os.Bundle;
 import android.text.InputType;
@@ -55,44 +52,46 @@ import java.util.concurrent.Executors;
 import android.Manifest;
 import android.content.pm.PackageManager;
 
+/**
+ * CameraFragment — Revised approach
+ *
+ * OLD approach problems:
+ *   - Yellow masking + registrar zone masking added heavy processing delay
+ *   - Parser tried to block/skip OCR text, causing back-ID fields to be missed
+ *   - Blur check added another pass over the bitmap before OCR even started
+ *
+ * NEW approach:
+ *   1. Guard aligns ID inside corner brackets → taps Capture
+ *   2. Bitmap captured and rotated immediately (no extra processing)
+ *   3. Bitmap cropped to the bracket guide rect
+ *   4. Cropped image shown in thumbnail
+ *   5. OCR runs on the full cropped image — NO masking, NO filtering
+ *   6. IdOcrParser does a best-effort parse of ALL the raw text
+ *   7. Review dialog shows every extracted field pre-filled
+ *      → Guard corrects anything wrong, then confirms
+ *   8. On confirm → data saved to DB
+ *
+ * This means:
+ *   - No blur check (removed — added delay and caused retakes on valid images)
+ *   - No yellow masking (removed — guard just ignores those fields in dialog)
+ *   - No registrar zone masking (removed — parser filters by label, guard corrects)
+ *   - Processing pipeline is now just: crop → OCR → show dialog
+ *   - Much faster capture-to-dialog time
+ */
 public class CameraFragment extends Fragment {
 
     private static final String TAG = "CameraFragment";
-    private static final int PERMISSION_REQUEST_CODE = 100;
-
-    // Blur threshold — lower = stricter
-    private static final double BLUR_THRESHOLD = 80.0;
-
-    // ── Yellow mask tuning ────────────────────────────────────────────────────
-    // Matches the bright yellow highlighter painted on the ID scan-skip zones.
-    private static final int YELLOW_R_MIN    = 180;
-    private static final int YELLOW_G_MIN    = 180;
-    private static final int YELLOW_B_MAX    = 80;
-    private static final int YELLOW_MIN_AREA = 2000;
-
-    // ── Registrar zone spatial mask (back ID only) ────────────────────────────
-    // The registrar/stamp zone on the back ID sits between the personal contact
-    // row and the emergency section. Based on the physical card layout it
-    // occupies roughly the middle 25-55% of the card's vertical height.
-    // These are proportional values (0.0–1.0) applied to bitmap height.
-    //
-    // Visual layout of back ID (top=0, bottom=1.0):
-    //   0.00 – 0.25  →  Address / Contact No. fields
-    //   0.25 – 0.55  →  Registrar zone (disclaimer + stamp + signature) ← MASK
-    //   0.55 – 1.00  →  Emergency contact fields
-    //
-    // Adjust these if testing shows the mask cuts into real data.
-    private static final float REGISTRAR_ZONE_TOP    = 0.25f;
-    private static final float REGISTRAR_ZONE_BOTTOM = 0.55f;
+    private static final int    PERMISSION_REQUEST_CODE = 100;
 
     // ── UI ────────────────────────────────────────────────────────────────────
-    private PreviewView previewView;
-    private ImageView   imgFrontPreview, imgBackPreview;
-    private Button      btnCapture, btnConfirm;
-    private Button      btnRetakeFront, btnRetakeBack;
-    private ImageButton btnFlash, btnFlipCamera;
-    private TextView    tvInstruction;
-    private ProgressBar progressBar;
+    private PreviewView     previewView;
+    private Scanoverlayview scanOverlay;
+    private ImageView       imgFrontPreview, imgBackPreview;
+    private Button          btnCapture, btnConfirm;
+    private Button          btnRetakeFront, btnRetakeBack;
+    private ImageButton     btnFlash, btnFlipCamera;
+    private TextView        tvInstruction;
+    private ProgressBar     progressBar;
 
     // ── Camera ────────────────────────────────────────────────────────────────
     private ProcessCameraProvider cameraProvider;
@@ -117,6 +116,7 @@ public class CameraFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_camera, container, false);
 
         previewView     = view.findViewById(R.id.previewView);
+        scanOverlay     = view.findViewById(R.id.scanOverlay);
         imgFrontPreview = view.findViewById(R.id.imgFrontPreview);
         imgBackPreview  = view.findViewById(R.id.imgBackPreview);
         btnCapture      = view.findViewById(R.id.btnCapture);
@@ -138,16 +138,19 @@ public class CameraFragment extends Fragment {
         }
 
         btnCapture.setOnClickListener(v -> captureImage());
+
         btnFlash.setOnClickListener(v -> {
             isFlashOn = !isFlashOn;
             if (camera != null) camera.getCameraControl().enableTorch(isFlashOn);
         });
+
         btnFlipCamera.setOnClickListener(v -> {
             lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK)
                     ? CameraSelector.LENS_FACING_FRONT
                     : CameraSelector.LENS_FACING_BACK;
             startCamera();
         });
+
         btnConfirm.setOnClickListener(v -> confirmAndSave());
         btnRetakeFront.setOnClickListener(v -> retakeFront());
         btnRetakeBack.setOnClickListener(v -> retakeBack());
@@ -197,12 +200,17 @@ public class CameraFragment extends Fragment {
 
     private void bindCameraUseCases() {
         if (cameraProvider == null) return;
+
         CameraSelector selector = new CameraSelector.Builder()
                 .requireLensFacing(lensFacing).build();
+
         Preview preview = new Preview.Builder().build();
+
+        // MINIMIZE_LATENCY = prioritise speed over image quality
         imageCapture = new ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build();
+
         try {
             cameraProvider.unbindAll();
             preview.setSurfaceProvider(previewView.getSurfaceProvider());
@@ -213,16 +221,14 @@ public class CameraFragment extends Fragment {
         }
     }
 
-    // ─── Capture → Preview → OCR ──────────────────────────────────────────────
+    // ─── Capture ──────────────────────────────────────────────────────────────
     //
     // Flow:
-    //   1. Guard taps Capture — photo taken immediately (camera is still)
-    //   2. Captured image shown in thumbnail straight away
-    //   3. Blur check on original image
-    //   4. Yellow zone masking  (front: signature strip / back: middle section)
-    //   5. Registrar zone masking on back ID (spatial — middle vertical strip)
-    //   6. OCR on fully masked still image
-    //   7. Review dialog with extracted fields
+    //   takePicture → rotate bitmap → crop to bracket rect → show thumbnail
+    //   → OCR on full crop (no masking) → review dialog
+    //
+    // The callback executor is cameraExecutor so bitmap conversion happens
+    // off the main thread. Only UI updates touch the main thread.
     //
     private void captureImage() {
         if (imageCapture == null) return;
@@ -235,293 +241,190 @@ public class CameraFragment extends Fragment {
 
         btnCapture.setEnabled(false);
         setUiLoading(true);
-        tvInstruction.setText("Capturing...");
 
-        imageCapture.takePicture(
-                ContextCompat.getMainExecutor(requireContext()),
+        boolean isFront = !frontCaptured;
+
+        // Use cameraExecutor so bitmap work is off the main thread
+        imageCapture.takePicture(cameraExecutor,
                 new ImageCapture.OnImageCapturedCallback() {
 
                     @Override
                     public void onCaptureSuccess(@NonNull ImageProxy imageProxy) {
-                        int rotation  = imageProxy.getImageInfo().getRotationDegrees();
-                        Bitmap bitmap = imageProxyToBitmap(imageProxy);
+                        // ── Convert & rotate (off main thread) ───────────────
+                        int    rotation = imageProxy.getImageInfo().getRotationDegrees();
+                        Bitmap bitmap   = imageProxyToBitmap(imageProxy);
                         imageProxy.close();
 
                         if (bitmap == null) {
-                            setUiLoading(false);
-                            btnCapture.setEnabled(true);
-                            showRetakeDialog("Could not read image. Please try again.");
+                            requireActivity().runOnUiThread(() -> {
+                                setUiLoading(false);
+                                btnCapture.setEnabled(true);
+                                Toast.makeText(requireContext(),
+                                        "Could not read image. Try again.",
+                                        Toast.LENGTH_SHORT).show();
+                                updateInstruction();
+                            });
                             return;
                         }
 
-                        boolean isFront = !frontCaptured;
+                        Bitmap rotated = rotateBitmap(bitmap, rotation);
+                        Bitmap cropped = cropToOverlay(rotated);
 
-                        // ── Show still in thumbnail immediately ───────────────────
-                        if (isFront) imgFrontPreview.setImageBitmap(bitmap);
-                        else         imgBackPreview.setImageBitmap(bitmap);
-                        tvInstruction.setText("Scanning " +
-                                (isFront ? "front" : "back") + "...");
+                        // ── Update UI (main thread) ───────────────────────────
+                        requireActivity().runOnUiThread(() -> {
+                            if (isFront) imgFrontPreview.setImageBitmap(cropped);
+                            else         imgBackPreview.setImageBitmap(cropped);
+                            tvInstruction.setText(
+                                    "Reading " + (isFront ? "front" : "back") + "...");
+                        });
 
-                        // ── Blur check ────────────────────────────────────────────
-                        double blurScore = getBlurScore(bitmap);
-                        Log.d(TAG, "Blur score: " + blurScore);
-                        if (blurScore < BLUR_THRESHOLD) {
-                            resetThumbnail(isFront);
-                            setUiLoading(false);
-                            btnCapture.setEnabled(true);
-                            showRetakeDialog("Image too blurry (score: "
-                                    + String.format("%.1f", blurScore)
-                                    + ").\nHold the camera steady and retake.");
-                            return;
-                        }
-
-                        // ── Masking pipeline ──────────────────────────────────────
-                        // Start with a mutable copy.
-                        Bitmap masked = maskYellowRegions(bitmap);
-
-                        // On the back ID, also blank out the registrar/stamp zone
-                        // (middle vertical strip) so OCR never sees the disclaimer,
-                        // signature, registrar name, or semester stamp.
-                        if (!isFront) {
-                            masked = maskRegistrarZone(masked);
-                        }
-
-                        // ── OCR on masked still ───────────────────────────────────
-                        runOcr(masked, rotation, isFront, bitmap);
+                        // ── OCR immediately on the cropped image ─────────────
+                        // No blur check, no masking — scan everything as-is.
+                        runOcr(cropped, isFront);
                     }
 
                     @Override
                     public void onError(@NonNull ImageCaptureException e) {
-                        setUiLoading(false);
-                        btnCapture.setEnabled(true);
-                        Log.e(TAG, "Capture error: " + e.getMessage());
-                        Toast.makeText(requireContext(),
-                                "Capture failed. Try again.", Toast.LENGTH_SHORT).show();
-                        updateInstruction();
+                        requireActivity().runOnUiThread(() -> {
+                            setUiLoading(false);
+                            btnCapture.setEnabled(true);
+                            Log.e(TAG, "Capture error: " + e.getMessage());
+                            Toast.makeText(requireContext(),
+                                    "Capture failed. Try again.",
+                                    Toast.LENGTH_SHORT).show();
+                            updateInstruction();
+                        });
                     }
                 }
         );
     }
 
-    // ─── OCR on still image ───────────────────────────────────────────────────
-
-    private void runOcr(Bitmap ocrBitmap, int rotation,
-                        boolean isFront, Bitmap originalBitmap) {
-        InputImage inputImage = InputImage.fromBitmap(ocrBitmap, rotation);
+    // ─── OCR ─────────────────────────────────────────────────────────────────
+    //
+    // Runs ML Kit on the cropped bitmap with zero pre-filtering.
+    // Whatever text the ID contains, we capture all of it.
+    // IdOcrParser then does a best-effort parse, and the review dialog
+    // lets the guard fix anything that was missed or wrong.
+    //
+    private void runOcr(Bitmap cropped, boolean isFront) {
+        // InputImage.fromBitmap is fine off-main-thread
+        InputImage inputImage = InputImage.fromBitmap(cropped, 0);
         TextRecognizer recognizer = TextRecognition.getClient(
                 TextRecognizerOptions.DEFAULT_OPTIONS);
 
         recognizer.process(inputImage)
                 .addOnSuccessListener(visionText -> {
-                    setUiLoading(false);
-                    btnCapture.setEnabled(true);
-
                     String rawText = visionText.getText();
-                    Log.d(TAG, "OCR Raw (" + (isFront ? "Front" : "Back") + "):\n" + rawText);
+                    Log.d(TAG, "=== OCR RAW " + (isFront ? "FRONT" : "BACK")
+                            + " ===\n" + rawText + "\n===");
 
                     StudentData tempData = new StudentData();
                     copyStudentData(studentData, tempData);
 
-                    int fieldCount = isFront
-                            ? IdOcrParser.parseFront(rawText, tempData)
-                            : IdOcrParser.parseBack(rawText, tempData);
+                    if (isFront) IdOcrParser.parseFront(rawText, tempData);
+                    else         IdOcrParser.parseBack(rawText, tempData);
 
-                    int minFields = isFront
-                            ? IdOcrParser.FRONT_MIN_FIELDS
-                            : IdOcrParser.BACK_MIN_FIELDS;
-
-                    if (fieldCount < minFields) {
-                        resetThumbnail(isFront);
-                        showRetakeDialog(
-                                "Only " + fieldCount + " field(s) detected.\n"
-                                        + "Ensure the ID is well-lit, flat, and fully in frame.\n\n"
-                                        + "Detected text:\n" + rawText);
-                        updateInstruction();
-                        return;
-                    }
-
-                    if (isFront) showFrontReviewDialog(originalBitmap, tempData);
-                    else         showBackReviewDialog(originalBitmap, tempData);
+                    // Show review dialog regardless of how many fields were found.
+                    // Guard fills in anything missing manually.
+                    requireActivity().runOnUiThread(() -> {
+                        setUiLoading(false);
+                        btnCapture.setEnabled(true);
+                        if (isFront) showFrontReviewDialog(tempData, rawText);
+                        else         showBackReviewDialog(tempData, rawText);
+                    });
                 })
                 .addOnFailureListener(e -> {
-                    setUiLoading(false);
-                    btnCapture.setEnabled(true);
                     Log.e(TAG, "OCR failed: " + e.getMessage());
-                    resetThumbnail(isFront);
-                    showRetakeDialog("OCR failed. Please retake the image.");
-                    updateInstruction();
+                    requireActivity().runOnUiThread(() -> {
+                        setUiLoading(false);
+                        btnCapture.setEnabled(true);
+                        // Even if OCR totally fails, open the dialog blank
+                        // so the guard can type the data manually
+                        if (isFront) showFrontReviewDialog(new StudentData(), "");
+                        else         showBackReviewDialog(new StudentData(), "");
+                    });
                 });
     }
 
-    // ─── Masking — Yellow Regions ─────────────────────────────────────────────
-    //
-    // Detects bright yellow rectangles (the painted "Do Not Scan" zones on the
-    // physical ID) and fills them with white. Works by finding contiguous bands
-    // of rows where a significant proportion of pixels are yellow.
-    //
-    // Returns a NEW mutable bitmap — the original is not modified.
-    //
-    private Bitmap maskYellowRegions(Bitmap src) {
-        int w = src.getWidth();
-        int h = src.getHeight();
+    // ─── Crop to Overlay Guide Rect ───────────────────────────────────────────
 
-        Bitmap mutable = src.copy(Bitmap.Config.ARGB_8888, true);
-        int[] pixels = new int[w * h];
-        mutable.getPixels(pixels, 0, w, 0, 0, w, h);
+    private Bitmap cropToOverlay(Bitmap bitmap) {
+        RectF scanRectView = scanOverlay.getScanRect();
 
-        int rowThreshold  = w / 6;       // min yellow pixels per row
-        boolean[] yellowRow = new boolean[h];
+        int viewW = scanOverlay.getWidth();
+        int viewH = scanOverlay.getHeight();
+        int bmpW  = bitmap.getWidth();
+        int bmpH  = bitmap.getHeight();
 
-        for (int y = 0; y < h; y++) {
-            int count = 0;
-            for (int x = 0; x < w; x++) {
-                if (isYellow(pixels[y * w + x])) count++;
-            }
-            yellowRow[y] = (count >= rowThreshold);
+        if (viewW == 0 || viewH == 0) {
+            Log.w(TAG, "Overlay not laid out yet — skipping crop");
+            return bitmap;
         }
 
-        int y = 0;
-        while (y < h) {
-            if (!yellowRow[y]) { y++; continue; }
+        float scaleX = (float) bmpW / viewW;
+        float scaleY = (float) bmpH / viewH;
 
-            int bandStart = y;
-            while (y < h && yellowRow[y]) y++;
-            int bandEnd = y - 1;
+        int cropLeft   = Math.max(0,    (int) (scanRectView.left   * scaleX));
+        int cropTop    = Math.max(0,    (int) (scanRectView.top    * scaleY));
+        int cropRight  = Math.min(bmpW, (int) (scanRectView.right  * scaleX));
+        int cropBottom = Math.min(bmpH, (int) (scanRectView.bottom * scaleY));
 
-            if ((bandEnd - bandStart + 1) < h / 100) continue; // too thin — noise
+        int cropW = cropRight  - cropLeft;
+        int cropH = cropBottom - cropTop;
 
-            int xMin = w, xMax = 0;
-            for (int row = bandStart; row <= bandEnd; row++) {
-                for (int col = 0; col < w; col++) {
-                    if (isYellow(pixels[row * w + col])) {
-                        if (col < xMin) xMin = col;
-                        if (col > xMax) xMax = col;
-                    }
-                }
-            }
-
-            int area = (xMax - xMin + 1) * (bandEnd - bandStart + 1);
-            if (area < YELLOW_MIN_AREA) continue;
-
-            Log.d(TAG, "Yellow mask: rows=" + bandStart + "-" + bandEnd
-                    + " cols=" + xMin + "-" + xMax);
-            for (int row = bandStart; row <= bandEnd; row++) {
-                for (int col = xMin; col <= xMax; col++) {
-                    pixels[row * w + col] = Color.WHITE;
-                }
-            }
+        if (cropW <= 0 || cropH <= 0) {
+            Log.w(TAG, "Crop rect invalid — using full bitmap");
+            return bitmap;
         }
 
-        mutable.setPixels(pixels, 0, w, 0, 0, w, h);
-        return mutable;
+        Log.d(TAG, "Crop: (" + cropLeft + "," + cropTop + ")→("
+                + cropRight + "," + cropBottom + ")  bitmap=" + bmpW + "×" + bmpH);
+        return Bitmap.createBitmap(bitmap, cropLeft, cropTop, cropW, cropH);
     }
 
-    private boolean isYellow(int pixel) {
-        int r = (pixel >> 16) & 0xFF;
-        int g = (pixel >> 8)  & 0xFF;
-        int b =  pixel        & 0xFF;
-        return r >= YELLOW_R_MIN && g >= YELLOW_G_MIN && b <= YELLOW_B_MAX;
+    // ─── Bitmap Rotation ──────────────────────────────────────────────────────
+
+    private Bitmap rotateBitmap(Bitmap bitmap, int degrees) {
+        if (degrees == 0) return bitmap;
+        Matrix matrix = new Matrix();
+        matrix.postRotate(degrees);
+        return Bitmap.createBitmap(
+                bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
     }
 
-    // ─── Masking — Registrar Zone (back ID only) ──────────────────────────────
+    // ─── Review Dialog — Front ID ─────────────────────────────────────────────
     //
-    // The registrar zone sits between the personal contact row and the emergency
-    // section — roughly the middle quarter of the card's vertical height.
-    // We white it out completely so ML Kit never sees the disclaimer text,
-    // registrar name/title, signature, or semester stamp.
+    // Shows pre-filled fields from the parser. Guard can edit any field.
+    // A collapsible "Raw OCR text" section lets the guard copy-paste if needed.
+    // Confirming accepts whatever is currently in the EditTexts.
     //
-    // REGISTRAR_ZONE_TOP and REGISTRAR_ZONE_BOTTOM (0.0–1.0) control the crop.
-    // Tune them if testing shows the mask is cutting into real data fields.
-    //
-    private Bitmap maskRegistrarZone(Bitmap src) {
-        int w       = src.getWidth();
-        int h       = src.getHeight();
-        int yTop    = (int) (h * REGISTRAR_ZONE_TOP);
-        int yBottom = (int) (h * REGISTRAR_ZONE_BOTTOM);
-
-        // src may already be mutable from maskYellowRegions — reuse it safely
-        Bitmap mutable = src.isMutable()
-                ? src
-                : src.copy(Bitmap.Config.ARGB_8888, true);
-
-        Canvas canvas = new Canvas(mutable);
-        Paint  paint  = new Paint();
-        paint.setColor(Color.WHITE);
-        paint.setStyle(Paint.Style.FILL);
-        canvas.drawRect(0, yTop, w, yBottom, paint);
-
-        Log.d(TAG, "Registrar zone masked: rows " + yTop + "-" + yBottom
-                + " of " + h);
-        return mutable;
-    }
-
-    // ─── Blur Detection ───────────────────────────────────────────────────────
-
-    private double getBlurScore(Bitmap bitmap) {
-        Bitmap gray = Bitmap.createBitmap(
-                bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(gray);
-        Paint  paint  = new Paint();
-        ColorMatrix cm = new ColorMatrix();
-        cm.setSaturation(0);
-        paint.setColorFilter(new ColorMatrixColorFilter(cm));
-        canvas.drawBitmap(bitmap, 0, 0, paint);
-
-        int sampleW = Math.min(gray.getWidth(),  640);
-        int sampleH = Math.min(gray.getHeight(), 480);
-        int startX  = (gray.getWidth()  - sampleW) / 2;
-        int startY  = (gray.getHeight() - sampleH) / 2;
-
-        int[] pixels = new int[sampleW * sampleH];
-        gray.getPixels(pixels, 0, sampleW, startX, startY, sampleW, sampleH);
-
-        double sum = 0, sumSq = 0;
-        int count = 0;
-
-        for (int row = 1; row < sampleH - 1; row++) {
-            for (int col = 1; col < sampleW - 1; col++) {
-                int center = (pixels[row * sampleW + col]           >> 16) & 0xFF;
-                int top    = (pixels[(row - 1) * sampleW + col]     >> 16) & 0xFF;
-                int bottom = (pixels[(row + 1) * sampleW + col]     >> 16) & 0xFF;
-                int left   = (pixels[row * sampleW + (col - 1)]     >> 16) & 0xFF;
-                int right  = (pixels[row * sampleW + (col + 1)]     >> 16) & 0xFF;
-                double lap = top + bottom + left + right - 4.0 * center;
-                sum   += lap;
-                sumSq += lap * lap;
-                count++;
-            }
-        }
-
-        if (count == 0) return 0;
-        double mean = sum / count;
-        return (sumSq / count) - (mean * mean);
-    }
-
-    // ─── Review Dialogs ───────────────────────────────────────────────────────
-
-    private void showFrontReviewDialog(Bitmap bitmap, StudentData tempData) {
+    private void showFrontReviewDialog(StudentData tempData, String rawText) {
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Review Front ID Data");
+        builder.setTitle("✅ Front ID Scanned — Review & Confirm");
         builder.setCancelable(false);
 
-        ScrollView  scrollView = new ScrollView(requireContext());
-        LinearLayout layout    = new LinearLayout(requireContext());
+        ScrollView   scroll = new ScrollView(requireContext());
+        LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(48, 24, 48, 24);
+        layout.setPadding(48, 16, 48, 24);
+
+        // Instruction note
+        addNote(layout,
+                "Fields below were auto-filled from the scan. "
+                        + "Fix anything that looks wrong, then tap Confirm.");
 
         EditText etStudentId = makeField(layout, "Student ID Number", tempData.studentId);
         EditText etName      = makeField(layout, "Student Name",      tempData.studentName);
         EditText etCourse    = makeField(layout, "Course",            tempData.course);
         EditText etCollege   = makeField(layout, "College",           tempData.college);
 
-        if (tempData.studentId   == null || tempData.studentName == null
-                || tempData.course == null || tempData.college   == null) {
-            addWarning(layout,
-                    "⚠️ Some fields were not detected. Please fill them in manually.");
+        // Raw OCR dump — helps guard find missed text
+        if (!rawText.isEmpty()) {
+            addRawOcrSection(layout, rawText);
         }
 
-        scrollView.addView(layout);
-        builder.setView(scrollView);
+        scroll.addView(layout);
+        builder.setView(scroll);
 
         builder.setPositiveButton("Confirm Front ✓", (dialog, which) -> {
             studentData.studentId   = etStudentId.getText().toString().trim();
@@ -529,6 +432,7 @@ public class CameraFragment extends Fragment {
             studentData.course      = etCourse.getText().toString().trim();
             studentData.college     = etCollege.getText().toString().trim();
             frontCaptured = true;
+            scanOverlay.setBackMode(true);
             btnRetakeFront.setVisibility(View.VISIBLE);
             tvInstruction.setText("Front confirmed! Now align BACK of ID.");
             Toast.makeText(requireContext(),
@@ -537,22 +441,27 @@ public class CameraFragment extends Fragment {
 
         builder.setNegativeButton("↺ Retake Front", (dialog, which) -> {
             imgFrontPreview.setImageResource(android.R.color.darker_gray);
-            dialog.dismiss();
             updateInstruction();
         });
 
         builder.show();
     }
 
-    private void showBackReviewDialog(Bitmap bitmap, StudentData tempData) {
+    // ─── Review Dialog — Back ID ──────────────────────────────────────────────
+
+    private void showBackReviewDialog(StudentData tempData, String rawText) {
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Review Back ID Data");
+        builder.setTitle("✅ Back ID Scanned — Review & Confirm");
         builder.setCancelable(false);
 
-        ScrollView  scrollView = new ScrollView(requireContext());
-        LinearLayout layout    = new LinearLayout(requireContext());
+        ScrollView   scroll = new ScrollView(requireContext());
+        LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(48, 24, 48, 24);
+        layout.setPadding(48, 16, 48, 24);
+
+        addNote(layout,
+                "Fields below were auto-filled from the scan. "
+                        + "Fix anything that looks wrong, then tap Confirm.");
 
         EditText etAddress   = makeField(layout, "Address",                  tempData.address);
         EditText etContact   = makeField(layout, "Contact Number",           tempData.contactNumber);
@@ -560,13 +469,12 @@ public class CameraFragment extends Fragment {
         EditText etEmerAddr  = makeField(layout, "Emergency Address",        tempData.emergencyAddress);
         EditText etEmerPhone = makeField(layout, "Emergency Contact Number", tempData.emergencyContactNumber);
 
-        if (tempData.address == null || tempData.contactNumber == null) {
-            addWarning(layout,
-                    "⚠️ Some fields were not detected. Please fill them in manually.");
+        if (!rawText.isEmpty()) {
+            addRawOcrSection(layout, rawText);
         }
 
-        scrollView.addView(layout);
-        builder.setView(scrollView);
+        scroll.addView(layout);
+        builder.setView(scroll);
 
         builder.setPositiveButton("Confirm Back ✓", (dialog, which) -> {
             studentData.address                = etAddress.getText().toString().trim();
@@ -577,32 +485,18 @@ public class CameraFragment extends Fragment {
             backCaptured = true;
             btnRetakeBack.setVisibility(View.VISIBLE);
             btnConfirm.setEnabled(true);
-            tvInstruction.setText("Both sides confirmed! Ready to save.");
+            btnConfirm.setVisibility(View.VISIBLE);
+            tvInstruction.setText("Both sides confirmed! Tap Save.");
             Toast.makeText(requireContext(),
                     "Back confirmed! Ready to save.", Toast.LENGTH_SHORT).show();
         });
 
         builder.setNegativeButton("↺ Retake Back", (dialog, which) -> {
             imgBackPreview.setImageResource(android.R.color.darker_gray);
-            dialog.dismiss();
             tvInstruction.setText("Align BACK of ID within frame");
         });
 
         builder.show();
-    }
-
-    // ─── Retake Dialog ────────────────────────────────────────────────────────
-
-    private void showRetakeDialog(String reason) {
-        new AlertDialog.Builder(requireContext())
-                .setTitle("Retake Required")
-                .setMessage(reason)
-                .setCancelable(false)
-                .setPositiveButton("Retake Now", (d, w) -> {
-                    d.dismiss();
-                    updateInstruction();
-                })
-                .show();
     }
 
     // ─── Retake Actions ───────────────────────────────────────────────────────
@@ -616,9 +510,9 @@ public class CameraFragment extends Fragment {
         imgFrontPreview.setImageResource(android.R.color.darker_gray);
         btnRetakeFront.setVisibility(View.GONE);
         btnConfirm.setEnabled(false);
+        btnConfirm.setVisibility(View.GONE);
+        scanOverlay.setBackMode(false);
         tvInstruction.setText("Align FRONT of ID within frame");
-        Toast.makeText(requireContext(),
-                "Ready to retake front ID.", Toast.LENGTH_SHORT).show();
     }
 
     private void retakeBack() {
@@ -631,9 +525,8 @@ public class CameraFragment extends Fragment {
         imgBackPreview.setImageResource(android.R.color.darker_gray);
         btnRetakeBack.setVisibility(View.GONE);
         btnConfirm.setEnabled(false);
+        btnConfirm.setVisibility(View.GONE);
         tvInstruction.setText("Align BACK of ID within frame");
-        Toast.makeText(requireContext(),
-                "Ready to retake back ID.", Toast.LENGTH_SHORT).show();
     }
 
     // ─── Save ─────────────────────────────────────────────────────────────────
@@ -646,11 +539,11 @@ public class CameraFragment extends Fragment {
             @Override
             public void onResponse(@NonNull retrofit2.Call<ApiResponse> call,
                                    @NonNull retrofit2.Response<ApiResponse> response) {
-                btnConfirm.setText("Confirm\n& Save");
+                btnConfirm.setText("Confirm & Save");
                 if (response.isSuccessful() && response.body() != null
                         && response.body().success) {
                     Toast.makeText(requireContext(),
-                            "✅ Student saved successfully!", Toast.LENGTH_LONG).show();
+                            "✅ Student saved!", Toast.LENGTH_LONG).show();
                     resetScanner();
                 } else {
                     btnConfirm.setEnabled(true);
@@ -662,7 +555,7 @@ public class CameraFragment extends Fragment {
             public void onFailure(@NonNull retrofit2.Call<ApiResponse> call,
                                   @NonNull Throwable t) {
                 btnConfirm.setEnabled(true);
-                btnConfirm.setText("Confirm\n& Save");
+                btnConfirm.setText("Confirm & Save");
                 Toast.makeText(requireContext(),
                         "Network error: " + t.getMessage(), Toast.LENGTH_LONG).show();
             }
@@ -677,13 +570,14 @@ public class CameraFragment extends Fragment {
         TextView tv = new TextView(ctx);
         tv.setText(label);
         tv.setTextSize(12f);
-        tv.setTextColor(0xFF414754);
-        tv.setPadding(0, 12, 0, 2);
+        tv.setTextColor(0xFF555555);
+        tv.setPadding(0, 16, 0, 2);
         parent.addView(tv);
 
         EditText et = new EditText(ctx);
         et.setText(value != null ? value : "");
-        et.setHint("Enter " + label);
+        et.setHint(value == null ? "⚠ Not detected — enter manually" : "");
+        et.setHintTextColor(0xFFE65100);
         et.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         et.setPadding(8, 8, 8, 8);
@@ -691,13 +585,46 @@ public class CameraFragment extends Fragment {
         return et;
     }
 
-    private void addWarning(LinearLayout layout, String message) {
-        TextView warning = new TextView(requireContext());
-        warning.setText(message);
-        warning.setTextColor(0xFFE65100);
-        warning.setTextSize(12f);
-        warning.setPadding(0, 8, 0, 8);
-        layout.addView(warning, 0);
+    private void addNote(LinearLayout layout, String message) {
+        TextView tv = new TextView(requireContext());
+        tv.setText(message);
+        tv.setTextColor(0xFF1565C0);
+        tv.setTextSize(12f);
+        tv.setPadding(0, 8, 0, 16);
+        layout.addView(tv);
+    }
+
+    /**
+     * Adds a collapsible section at the bottom of the dialog showing the
+     * full raw OCR text. Useful when a field wasn't auto-detected —
+     * the guard can read the raw dump and type the value manually.
+     */
+    private void addRawOcrSection(LinearLayout layout, String rawText) {
+        TextView header = new TextView(requireContext());
+        header.setText("▼ Raw scan text (tap to expand)");
+        header.setTextColor(0xFF888888);
+        header.setTextSize(11f);
+        header.setPadding(0, 24, 0, 4);
+        layout.addView(header);
+
+        TextView body = new TextView(requireContext());
+        body.setText(rawText);
+        body.setTextColor(0xFF444444);
+        body.setTextSize(10f);
+        body.setPadding(8, 4, 8, 8);
+        body.setBackgroundColor(0xFFF5F5F5);
+        body.setVisibility(View.GONE);   // collapsed by default
+        layout.addView(body);
+
+        header.setOnClickListener(v -> {
+            if (body.getVisibility() == View.GONE) {
+                body.setVisibility(View.VISIBLE);
+                header.setText("▲ Raw scan text (tap to collapse)");
+            } else {
+                body.setVisibility(View.GONE);
+                header.setText("▼ Raw scan text (tap to expand)");
+            }
+        });
     }
 
     private void copyStudentData(StudentData from, StudentData to) {
@@ -716,15 +643,10 @@ public class CameraFragment extends Fragment {
         progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
     }
 
-    private void resetThumbnail(boolean isFront) {
-        if (isFront) imgFrontPreview.setImageResource(android.R.color.darker_gray);
-        else         imgBackPreview.setImageResource(android.R.color.darker_gray);
-    }
-
     private void updateInstruction() {
-        if (!frontCaptured)     tvInstruction.setText("Align FRONT of ID within frame");
-        else if (!backCaptured) tvInstruction.setText("Align BACK of ID within frame");
-        else                    tvInstruction.setText("Both sides confirmed!");
+        if (!frontCaptured)      tvInstruction.setText("Align FRONT of ID within frame");
+        else if (!backCaptured)  tvInstruction.setText("Align BACK of ID within frame");
+        else                     tvInstruction.setText("Both sides confirmed!");
     }
 
     private void resetScanner() {
@@ -734,8 +656,11 @@ public class CameraFragment extends Fragment {
         imgFrontPreview.setImageResource(android.R.color.darker_gray);
         imgBackPreview.setImageResource(android.R.color.darker_gray);
         btnConfirm.setEnabled(false);
+        btnConfirm.setVisibility(View.GONE);
+        btnConfirm.setText("Confirm & Save");
         btnRetakeFront.setVisibility(View.GONE);
         btnRetakeBack.setVisibility(View.GONE);
+        scanOverlay.setBackMode(false);
         tvInstruction.setText("Align FRONT of ID within frame");
     }
 
@@ -745,6 +670,7 @@ public class CameraFragment extends Fragment {
         try {
             ImageProxy.PlaneProxy[] planes = imageProxy.getPlanes();
 
+            // JPEG format (some devices)
             if (planes.length == 1) {
                 ByteBuffer buffer = planes[0].getBuffer();
                 byte[] bytes = new byte[buffer.remaining()];
@@ -752,6 +678,7 @@ public class CameraFragment extends Fragment {
                 return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
             }
 
+            // YUV_420_888 format (most devices)
             ByteBuffer yBuffer = planes[0].getBuffer();
             ByteBuffer uBuffer = planes[1].getBuffer();
             ByteBuffer vBuffer = planes[2].getBuffer();
@@ -779,7 +706,7 @@ public class CameraFragment extends Fragment {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             yuvImage.compressToJpeg(
                     new Rect(0, 0, imageProxy.getWidth(), imageProxy.getHeight()),
-                    95, out);
+                    90, out);
             byte[] bytes = out.toByteArray();
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
 
