@@ -7,13 +7,13 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class RetrofitClient {
-    private static final String BASE_URL = "http://192.168.100.42/mbsiss/";
+    private static final String BASE_URL = "http://192.168.137.1/mbsiss/";
     private static Retrofit instance;
 
     public static Retrofit getInstance() {
         if (instance == null) {
 
-            // ✅ Logging interceptor to see exact server response
+            //  Logging interceptor to see exact server response
             HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
             logging.setLevel(HttpLoggingInterceptor.Level.BODY);
 
@@ -21,7 +21,7 @@ public class RetrofitClient {
                     .addInterceptor(logging)
                     .build();
 
-            // ✅ Lenient Gson to handle malformed JSON
+            //  Lenient Gson to handle malformed JSON
             com.google.gson.Gson gson = new GsonBuilder()
                     .setLenient()
                     .create();
