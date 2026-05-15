@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#EEF2F7"
+    android:padding="24dp">
+
+    <!-- ── Top branding block ──────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginBottom="28dp">
+
+        <!-- Shield icon + MBSISS label row -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <!-- Shield emoji as icon placeholder -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🛡"
+                android:textSize="22sp"
+                android:textColor="#1A56DB"
+                android:layout_marginEnd="6dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MBSISS"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A2E"
+                android:letterSpacing="0.08"/>
+        </LinearLayout>
+
+        <!-- Subtitle -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Mobile-Based Student ID Scanning\nSystem"
+            android:textSize="12sp"
+            android:textColor="#6B7280"
+            android:gravity="center"
+            android:lineSpacingExtra="2dp"/>
+    </LinearLayout>
+
+    <!-- ── Login card ──────────────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_login_card"
+        android:padding="24dp"
+        android:elevation="6dp">
+
+        <!-- Card title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Staff Sign In"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A2E"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enter your credentials to access the scanner"
+            android:textSize="13sp"
+            android:textColor="#6B7280"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Error message (hidden by default) -->
+        <TextView
+            android:id="@+id/tvLoginError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#DC2626"
+            android:textSize="12sp"
+            android:background="@drawable/bg_error_box"
+            android:padding="10dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone"/>
+
+        <!-- Username label -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Username"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#374151"
+            android:layout_marginBottom="6dp"/>
+
+        <!-- Username field -->
+        <EditText
+            android:id="@+id/etUsername"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="e.g. j.doe@university.edu"
+            android:inputType="text"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="0dp"
+            android:textSize="14sp"
+            android:textColor="#1A1A2E"
+            android:textColorHint="#9CA3AF"
+            android:background="@drawable/bg_input_field"
+            android:layout_marginBottom="18dp"
+            android:maxLines="1"
+            android:imeOptions="actionNext"
+            android:singleLine="true"/>
+
+        <!-- Password label -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Password"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#374151"
+            android:layout_marginBottom="6dp"/>
+
+        <!-- Password field row (input + eye toggle) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_input_field"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="28dp">
+
+            <EditText
+                android:id="@+id/etPassword"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:hint="Enter your password"
+                android:inputType="textPassword"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="0dp"
+                android:textSize="14sp"
+                android:textColor="#1A1A2E"
+                android:textColorHint="#9CA3AF"
+                android:background="@null"
+                android:maxLines="1"
+                android:imeOptions="actionDone"
+                android:singleLine="true"/>
+
+            <!-- Show/hide password toggle -->
+            <TextView
+                android:id="@+id/btnTogglePassword"
+                android:layout_width="44dp"
+                android:layout_height="match_parent"
+                android:text="👁"
+                android:textSize="16sp"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackgroundBorderless"/>
+        </LinearLayout>
+
+        <!-- Progress bar -->
+        <ProgressBar
+            android:id="@+id/progressBarLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminateTint="#1A56DB"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"/>
+
+        <!-- Sign In button -->
+        <Button
+            android:id="@+id/btnLogin"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Sign In"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#1A56DB"
+            android:stateListAnimator="@null"
+            android:elevation="0dp"/>
+
+    </LinearLayout>
+
+    <!-- ── Secure access footer ────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="32dp">
+
+        <!-- Left line -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="#C7CDD6"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="  SECURE ACCESS  "
+            android:textSize="10sp"
+            android:textColor="#9CA3AF"
+            android:letterSpacing="0.15"/>
+
+        <!-- Right line -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="#C7CDD6"/>
+    </LinearLayout>
+
+</LinearLayout>

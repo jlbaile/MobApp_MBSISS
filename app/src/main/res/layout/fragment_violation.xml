@@ -1,188 +1,225 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F9F9FF">
+    android:orientation="vertical"
+    android:background="#F0F0F5">
 
+    <!-- ── Header bar ─────────────────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="16dp"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:elevation="2dp">
 
-        <!-- Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Record Violation"
-            android:textSize="20sp"
+            android:textSize="22sp"
             android:textStyle="bold"
-            android:textColor="#191C23"
-            android:layout_marginBottom="4dp"/>
+            android:textColor="#191C23"/>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Search or scan a student ID to begin."
+            android:text="Search a student ID to begin."
             android:textSize="13sp"
-            android:textColor="#414754"
-            android:layout_marginBottom="16dp"/>
+            android:textColor="#727785"
+            android:layout_marginTop="2dp"/>
+    </LinearLayout>
 
-        <!-- Search Row -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="12dp">
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="24dp">
 
+            <!-- ── Search field (full width, no Scan button) ──────────── -->
             <EditText
                 android:id="@+id/etSearch"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
                 android:hint="Student ID or Name..."
                 android:inputType="text"
-                android:padding="10dp"
-                android:layout_marginEnd="8dp"
-                android:background="@android:drawable/edit_text"/>
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="0dp"
+                android:textSize="14sp"
+                android:textColor="#191C23"
+                android:textColorHint="#AAAAAA"
+                android:background="@drawable/bg_search_field"
+                android:layout_marginBottom="16dp"
+                android:maxLines="1"
+                android:imeOptions="actionSearch"
+                android:singleLine="true"/>
 
-            <Button
-                android:id="@+id/btnScanToFind"
-                android:layout_width="wrap_content"
+            <!-- ── Student Card (hidden until found) ──────────────────── -->
+            <LinearLayout
+                android:id="@+id/cardStudent"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📷 Scan"
-                android:backgroundTint="#005BBF"
-                android:textColor="#FFFFFF"/>
-        </LinearLayout>
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:elevation="2dp"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone">
 
-        <!-- Student Card (hidden until found) -->
-        <LinearLayout
-            android:id="@+id/cardStudent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:elevation="2dp"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
 
+                    <TextView
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:text="👤"
+                        android:textSize="20sp"
+                        android:gravity="center"
+                        android:background="#EEF2FF"
+                        android:layout_marginEnd="12dp"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvStudentName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Student Name"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#191C23"/>
+
+                        <TextView
+                            android:id="@+id/tvStudentId"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ID: —"
+                            android:textSize="12sp"
+                            android:textColor="#727785"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvStudentCourse"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Course | College"
+                    android:textSize="12sp"
+                    android:textColor="#727785"
+                    android:layout_marginTop="4dp"/>
+            </LinearLayout>
+
+            <!-- ── Violation Selector (hidden until student found) ─────── -->
+            <LinearLayout
+                android:id="@+id/layoutViolationSelector"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:elevation="2dp"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Violation Category"
+                    android:textSize="12sp"
+                    android:textColor="#414754"
+                    android:layout_marginBottom="4dp"/>
+
+                <Spinner
+                    android:id="@+id/spinnerCategory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Specific Violation"
+                    android:textSize="12sp"
+                    android:textColor="#414754"
+                    android:layout_marginBottom="4dp"/>
+
+                <Spinner
+                    android:id="@+id/spinnerViolation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:id="@+id/tvSeverityBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Severity: —"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="#414754"/>
+
+                <EditText
+                    android:id="@+id/etNotes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Notes (optional)"
+                    android:minLines="2"
+                    android:inputType="textMultiLine"
+                    android:padding="10dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@android:drawable/edit_text"/>
+
+                <Button
+                    android:id="@+id/btnSubmitViolation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Submit Violation"
+                    android:backgroundTint="#BA1A1A"
+                    android:textColor="#FFFFFF"
+                    android:stateListAnimator="@null"/>
+            </LinearLayout>
+
+            <!-- ── Recent Violation Logs title ────────────────────────── -->
             <TextView
-                android:id="@+id/tvStudentName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Student Name"
-                android:textSize="17sp"
+                android:text="Recent Violation Logs"
+                android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="#191C23"/>
-
-            <TextView
-                android:id="@+id/tvStudentId"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ID: —"
-                android:textSize="13sp"
-                android:textColor="#414754"/>
-
-            <TextView
-                android:id="@+id/tvStudentCourse"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Course | College"
-                android:textSize="12sp"
-                android:textColor="#727785"/>
-        </LinearLayout>
-
-        <!-- Violation Selector (hidden until student found) -->
-        <LinearLayout
-            android:id="@+id/layoutViolationSelector"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:elevation="2dp"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Violation Category"
-                android:textSize="12sp"
-                android:textColor="#414754"
-                android:layout_marginBottom="4dp"/>
-
-            <Spinner
-                android:id="@+id/spinnerCategory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:textColor="#191C23"
                 android:layout_marginBottom="12dp"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Specific Violation"
-                android:textSize="12sp"
-                android:textColor="#414754"
-                android:layout_marginBottom="4dp"/>
-
-            <Spinner
-                android:id="@+id/spinnerViolation"
+            <!-- ── Log RecyclerView ────────────────────────────────────── -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerLog"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"/>
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false"/>
 
-            <TextView
-                android:id="@+id/tvSeverityBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Severity: —"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="4dp"
-                android:layout_marginBottom="12dp"
-                android:background="#414754"/>
-
-            <EditText
-                android:id="@+id/etNotes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Notes (optional)"
-                android:minLines="2"
-                android:inputType="textMultiLine"
-                android:padding="10dp"
-                android:layout_marginBottom="12dp"
-                android:background="@android:drawable/edit_text"/>
-
-            <Button
-                android:id="@+id/btnSubmitViolation"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Submit Violation"
-                android:backgroundTint="#BA1A1A"
-                android:textColor="#FFFFFF"/>
         </LinearLayout>
-
-        <!-- Recent Logs Title -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Recent Violation Logs"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textColor="#191C23"
-            android:layout_marginBottom="8dp"/>
-
-        <!-- Log RecyclerView (fixed height inside ScrollView) -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerLog"
-            android:layout_width="match_parent"
-            android:layout_height="400dp"
-            android:nestedScrollingEnabled="false"/>
-
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

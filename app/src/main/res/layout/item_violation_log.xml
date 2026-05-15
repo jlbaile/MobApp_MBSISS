@@ -1,82 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  item_violation_log.xml — redesigned card
+  ─────────────────────────────────────────
+  Layout (matches reference screenshot):
+
+  [ 👤 avatar ]  STUDENT NAME (bold, uppercase)      [ SEVERITY badge ]
+                 Violation type name
+                 ID: XX-XXXX
+                 2026-05-01 12:43:42
+-->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:background="#FFFFFF"
-    android:padding="12dp"
-    android:layout_marginBottom="8dp"
+    android:padding="14dp"
+    android:layout_marginBottom="10dp"
     android:elevation="1dp"
-    android:gravity="center_vertical">
+    android:gravity="top">
 
-    <!-- Icon Placeholder -->
+    <!-- Avatar icon box -->
     <TextView
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:text="🪪"
-        android:textSize="22sp"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:text="👤"
+        android:textSize="20sp"
         android:gravity="center"
         android:background="#EEF2FF"
-        android:layout_marginEnd="12dp"/>
+        android:layout_marginEnd="12dp"
+        android:layout_marginTop="2dp"/>
 
-    <!-- Info -->
+    <!-- Content column -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical">
 
+        <!-- Name row + severity badge -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
 
             <TextView
                 android:id="@+id/tvLogStudentName"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Student Name"
-                android:textSize="14sp"
+                android:text="STUDENT NAME"
+                android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="#191C23"/>
+                android:textColor="#191C23"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:layout_marginEnd="8dp"/>
 
+            <!-- Severity badge — color set in adapter -->
             <TextView
                 android:id="@+id/tvLogSeverity"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Minor"
-                android:textSize="10sp"
+                android:textSize="11sp"
+                android:textStyle="bold"
                 android:textColor="#FFFFFF"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="3dp"
                 android:background="#005BBF"/>
         </LinearLayout>
 
+        <!-- Violation type -->
         <TextView
             android:id="@+id/tvLogViolation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Violation Type"
-            android:textSize="12sp"
-            android:textColor="#414754"/>
+            android:textSize="13sp"
+            android:textColor="#414754"
+            android:layout_marginBottom="5dp"/>
 
+        <!-- Student ID -->
         <TextView
             android:id="@+id/tvLogStudentId"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="ID: —"
             android:textSize="11sp"
-            android:textColor="#727785"/>
+            android:textColor="#9E9E9E"
+            android:layout_marginBottom="2dp"/>
 
+        <!-- Date/time (Philippine format) -->
         <TextView
             android:id="@+id/tvLogDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Date"
+            android:text="—"
             android:textSize="11sp"
-            android:textColor="#727785"/>
+            android:textColor="#9E9E9E"/>
+
     </LinearLayout>
 </LinearLayout>
