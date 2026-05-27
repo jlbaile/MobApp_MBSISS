@@ -3,7 +3,8 @@ package com.example.mbsiss;
 import com.google.gson.annotations.SerializedName;
 
 public class ViolationLogData {
-    @SerializedName("id")             public int id;
+    // ⚠️ FIX: Same issue — server returns id as a JSON string, not a number.
+    @SerializedName("id")             public String id;
     @SerializedName("student_id")     public String studentId;
     @SerializedName("student_name")   public String studentName;
     @SerializedName("course")         public String course;

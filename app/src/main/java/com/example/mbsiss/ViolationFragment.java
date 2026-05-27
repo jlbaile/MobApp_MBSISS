@@ -260,7 +260,7 @@ public class ViolationFragment extends Fragment {
             }
             submitViolation(new ViolationRequest(
                     selectedStudent.studentId,
-                    selectedViolationType.id,
+                    Integer.parseInt(selectedViolationType.id),   // ← convert String → int
                     etNotes.getText().toString().trim()));
         });
     }

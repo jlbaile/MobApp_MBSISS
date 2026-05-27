@@ -8,8 +8,8 @@ public class ViolationRequest {
     @SerializedName("notes")             public String notes;
 
     public ViolationRequest(String studentId, int violationTypeId, String notes) {
-        this.studentId = studentId;
+        this.studentId       = studentId;
         this.violationTypeId = violationTypeId;
-        this.notes = notes;
+        this.notes           = notes;
     }
 }
